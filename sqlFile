@@ -1,0 +1,112 @@
+--Find out the case each day
+SELECT location, date, total_cases, new_cases, population, total_deaths
+FROM covidsituation
+ORDER BY 1,2;
+
+---Find out the case happen in VN
+SELECT location, date, total_cases, new_cases, population, total_deaths
+FROM covidsituation
+WHERE location like '%Viet%'
+ORDER BY total_cases DESC;
+
+---Percentage between total case and total death & total case and population
+SELECT iso_code, date, total_cases, new_cases, population, total_deaths, 
+ROUND((total_cases/population*100):: numeric,2) as percentage_case,
+CASE 
+	WHEN total_deaths is not null THEN ROUND((total_deaths/total_cases*100):: numeric,2)
+	ELSE 0 
+END as percentage_deaths
+FROM covidsituation
+WHERE location like '%Viet%'
+ORDER BY date;
+
+--- Looking at countries with highest infection rate compared to populations
+SELECT iso_code, location, population, MAX(total_cases) as max_total_cases,
+ROUND((MAX((total_cases)/population)*100)::numeric,2) as highest_infection_rate
+FROM covidsituation
+GROUP BY iso_code, population, location
+ORDER BY Highest_infection_rate DESC;
+
+---Showing countries with highest death count per population
+Select location , MAX (total_deaths) as Total_death_count
+FROM covidsituation
+WHERE total_deaths is not null and continent is not null
+GROUP BY location
+ORDER BY Total_death_count desc;
+
+-- Showing the deathcount by continent
+Select continent , MAX (total_deaths) as Total_death_count
+FROM covidsituation
+WHERE total_deaths is not null 
+and continent is not null
+GROUP BY continent
+ORDER BY Total_death_count desc;
+
+---Max total case by date in VN
+SELECT location, population, date, total_cases, new_cases 
+FROM covidsituation
+WHERE total_cases IN
+	(SELECT MAX(total_cases) as max_total_cases
+	FROM covidsituation
+	WHERE location like '%Viet%')
+	
+--- GLOBAL NUMBERS
+Select continent, date, SUM(new_cases) as total_new_cases
+FROM covidsituation
+WHERE continent is not null
+GROUP BY date, continent
+ORDER BY 1,2
+
+---Total case by each country
+WITH total_cases_by_country ( country, population,total_cases)
+AS (SELECT location, population, MAX(total_cases) as sum_total_cases
+	FROM covidsituation
+	WHERE continent is not null AND total_cases is not null
+	GROUP BY location, population
+    ORDER BY sum_total_cases DESC) 
+SELECT *
+FROM total_cases_by_country
+
+--- Total vaccinations by each country
+WITH total_vaccination(code, country, population, total_vaccinations,rank,people_vaccinated,people_fully_vaccinated)
+AS (SELECT iso_code, location, population, MAX(total_vaccinations) as total_vaccinations,
+	RANK()OVER(ORDER BY MAX(total_vaccinations) DESC) as total_rank, 
+	MAX(people_vaccinated) as total_people_vaccinated, 
+	MAX(people_fully_vaccinated) as total_people_fully_vaccinated
+    FROM covidvacination
+	WHERE continent is not null
+    GROUP BY iso_code,location, population
+    ORDER BY total_vaccinations)
+SELECT *
+FROM total_vaccination
+
+--Total case & total vaccinations
+WITH total_vaccination(code, country, population, total_vaccinations,rank,people_vaccinated,people_fully_vaccinated)
+AS (SELECT iso_code, location, population, MAX(total_vaccinations) as total_vaccinations, 
+	RANK()OVER(ORDER BY MAX(total_vaccinations) DESC) as total_rank,
+	MAX(people_vaccinated) as total_people_vaccinated, 
+	MAX(people_fully_vaccinated) as total_people_fully_vaccinated
+    FROM covidvacination
+	WHERE continent is not null
+    GROUP BY iso_code,location, population
+    ORDER BY total_vaccinations),
+total_cases(code,country, population,total_cases)
+AS (SELECT iso_code, location, population, MAX(total_cases) as sum_total_cases
+	FROM covidsituation
+	WHERE continent is not null AND total_cases is not null
+	GROUP BY iso_code, location, population
+    ORDER BY sum_total_cases DESC) 
+SELECT c.country, c.population, total_cases, v.total_vaccinations, v.people_vaccinated,
+CASE 
+	WHEN people_vaccinated is not null THEN ROUND((v.people_vaccinated/c.population*100):: numeric,2) 
+	ELSE 0 
+END as percetage_vaccinated,
+v.people_fully_vaccinated
+FROM total_cases as c LEFT JOIN total_vaccination as v
+ON c.code = v.code
+ORDER BY percetage_vaccinated DESC;
+
+---select data on covidvaccinations
+-- SELECT location, total_vaccinations, new_vaccinations
+-- FROM covidvacination
+-- WHERE location = 'Aruba'
